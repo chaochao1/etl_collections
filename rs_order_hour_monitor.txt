@@ -1,0 +1,280 @@
+CREATE DEFINER=`root`@`%` PROCEDURE `rs_order_hour_monitor`(
+start_time date,
+end_time date,
+v_etl_number int#,
+#inout status_flag  varchar(10)
+)
+BEGIN
+
+
+
+declare v_date date;
+set v_date=start_time;
+
+
+loop_label:loop
+
+
+
+drop table if exists tmp_rs_order_hour_monitor;
+create table if not exists tmp_rs_order_hour_monitor as
+select site_from,start_date,date(start_date) date,hour(start_date) hour,
+order_num,uv_num,reg_num from  IP.hour_count
+where start_date>date_add(v_date, INTERVAL -30 day);
+commit;
+
+
+##########################################################订单预警
+
+drop table if exists tmp_rs_order_hour_monitor1;
+create table if not exists tmp_rs_order_hour_monitor1 as
+select site_from,hour,avg(order_num) avg_cnt from IP.tmp_rs_order_hour_monitor
+#where start_date>date_add('2015-03-10', INTERVAL -30 day)
+#
+#where site_from='www'
+group by site_from,hour;
+commit;
+
+
+drop table if exists tmp_rs_order_hour_monitor2;
+create table tmp_rs_order_hour_monitor2 as
+select a.site_from,hour,order_num 
+from tmp_rs_order_hour_monitor a 
+where (select count(*) from tmp_rs_order_hour_monitor 
+where site_from = a.site_from
+and hour=a.hour
+and a.site_from<>'ar'
+ and order_num < a.order_num   ) <4 
+and site_from<>'ar'
+order by a.site_from,a.hour,a.order_num desc ;
+commit;
+
+drop table if exists tmp_rs_order_hour_monitor3;
+create table tmp_rs_order_hour_monitor3 as
+select a.site_from,hour,order_num 
+from tmp_rs_order_hour_monitor a 
+where (select count(*) from tmp_rs_order_hour_monitor 
+where site_from = a.site_from
+and hour=a.hour
+and a.site_from<>'ar'
+ and order_num > a.order_num   ) <4 
+and site_from<>'ar'
+order by a.site_from,a.hour,a.order_num desc ;
+commit;
+
+drop table if exists tmp_rs_order_hour_monitor4;
+create table tmp_rs_order_hour_monitor4 as
+select site_from,hour,max(order_num) order_num from tmp_rs_order_hour_monitor2
+group by  site_from,hour
+union all
+select site_from,hour,min(order_num) order_num from tmp_rs_order_hour_monitor3
+group by  site_from,hour;
+commit;
+
+drop table if exists tmp_rs_order_hour_monitor5;
+create table tmp_rs_order_hour_monitor5 as
+select site_from,hour,max(order_num) max_order_num,min(order_num) min_order_num from
+tmp_rs_order_hour_monitor4
+group by site_from,hour;
+commit;
+
+SET SQL_SAFE_UPDATES = 0;
+delete from rs_order_hour_monitor_num  where date(start_date)=v_date;
+commit;
+
+insert into rs_order_hour_monitor_num(site_from,start_date,hour,index_current,max_order_num,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.hour,a.order_num,max_order_num,min_order_num,'min','order' from tmp_rs_order_hour_monitor a
+left join tmp_rs_order_hour_monitor5 b
+on a.site_from=b.site_from
+and a.hour=b.hour
+and date(a.start_date)=v_date
+where a.order_num<b.min_order_num*0.6 and a.site_from not in('ar','it');
+commit;
+
+#delete from rs_order_hour_monitor_avg  where date(start_date)=v_date;
+#commit;
+insert into rs_order_hour_monitor_num(site_from,start_date,hour,index_current,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.hour,a.order_num,b.avg_cnt,'avg','order' from tmp_rs_order_hour_monitor a
+left join tmp_rs_order_hour_monitor1 b
+on a.site_from=b.site_from
+and a.hour=b.hour
+and date(a.start_date)=v_date
+where a.order_num<0.2*b.avg_cnt and a.site_from not in('ar','it','ru');
+commit;
+
+
+##########################################################IP预警
+
+drop table if exists tmp_rs_order_hour_monitor1;
+create table if not exists tmp_rs_order_hour_monitor1 as
+select site_from,hour,avg(uv_num) avg_cnt from IP.tmp_rs_order_hour_monitor
+#where start_date>date_add('2015-03-10', INTERVAL -30 day)
+#
+#where site_from='www'
+group by site_from,hour;
+commit;
+
+
+drop table if exists tmp_rs_order_hour_monitor2;
+create table tmp_rs_order_hour_monitor2 as
+select a.site_from,hour,uv_num 
+from tmp_rs_order_hour_monitor a 
+where (select count(*) from tmp_rs_order_hour_monitor 
+where site_from = a.site_from
+and hour=a.hour
+and a.site_from<>'ar'
+ and uv_num < a.uv_num   ) <4 
+and site_from<>'ar'
+order by a.site_from,a.hour,a.uv_num desc ;
+commit;
+
+drop table if exists tmp_rs_order_hour_monitor3;
+create table tmp_rs_order_hour_monitor3 as
+select a.site_from,hour,uv_num 
+from tmp_rs_order_hour_monitor a 
+where (select count(*) from tmp_rs_order_hour_monitor 
+where site_from = a.site_from
+and hour=a.hour
+and a.site_from<>'ar'
+ and uv_num > a.uv_num   ) <4 
+and site_from<>'ar'
+order by a.site_from,a.hour,a.uv_num desc ;
+commit;
+
+drop table if exists tmp_rs_order_hour_monitor4;
+create table tmp_rs_order_hour_monitor4 as
+select site_from,hour,max(uv_num) uv_num from tmp_rs_order_hour_monitor2
+group by  site_from,hour
+union all
+select site_from,hour,min(uv_num) uv_num from tmp_rs_order_hour_monitor3
+group by  site_from,hour;
+commit;
+
+drop table if exists tmp_rs_order_hour_monitor5;
+create table tmp_rs_order_hour_monitor5 as
+select site_from,hour,max(uv_num) max_uv_num,min(uv_num) min_uv_num from
+tmp_rs_order_hour_monitor4
+group by site_from,hour;
+commit;
+
+#SET SQL_SAFE_UPDATES = 0;
+#delete from rs_order_hour_monitor_num  where date(start_date)=v_date;
+commit;
+
+insert into rs_order_hour_monitor_num(site_from,start_date,hour,index_current,max_order_num,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.hour,a.uv_num,max_uv_num,min_uv_num,'min','ip' from tmp_rs_order_hour_monitor a
+left join tmp_rs_order_hour_monitor5 b
+on a.site_from=b.site_from
+and a.hour=b.hour
+and date(a.start_date)=v_date
+where a.uv_num<b.min_uv_num*0.8 and a.site_from not in('ar','it');
+commit;
+
+#delete from rs_order_hour_monitor_avg  where date(start_date)=v_date;
+#commit;
+insert into rs_order_hour_monitor_num(site_from,start_date,hour,index_current,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.hour,a.uv_num,b.avg_cnt,'avg','ip' from tmp_rs_order_hour_monitor a
+left join tmp_rs_order_hour_monitor1 b
+on a.site_from=b.site_from
+and a.hour=b.hour
+and date(a.start_date)=v_date
+where a.uv_num<0.2*b.avg_cnt and a.site_from not in('ar','it','ru');
+commit;
+
+##########################################################注册用户数
+
+
+
+drop table if exists tmp_rs_order_hour_monitor1;
+create table if not exists tmp_rs_order_hour_monitor1 as
+select site_from,hour,avg(reg_num) avg_cnt from IP.tmp_rs_order_hour_monitor
+#where start_date>date_add('2015-03-10', INTERVAL -30 day)
+#
+#where site_from='www'
+group by site_from,hour;
+commit;
+
+
+drop table if exists tmp_rs_order_hour_monitor2;
+create table tmp_rs_order_hour_monitor2 as
+select a.site_from,hour,reg_num 
+from tmp_rs_order_hour_monitor a 
+where (select count(*) from tmp_rs_order_hour_monitor 
+where site_from = a.site_from
+and hour=a.hour
+and a.site_from<>'ar'
+ and reg_num < a.reg_num   ) <4 
+and site_from<>'ar'
+order by a.site_from,a.hour,a.reg_num desc ;
+commit;
+
+drop table if exists tmp_rs_order_hour_monitor3;
+create table tmp_rs_order_hour_monitor3 as
+select a.site_from,hour,reg_num 
+from tmp_rs_order_hour_monitor a 
+where (select count(*) from tmp_rs_order_hour_monitor 
+where site_from = a.site_from
+and hour=a.hour
+and a.site_from<>'ar'
+ and reg_num > a.reg_num   ) <4 
+and site_from<>'ar'
+order by a.site_from,a.hour,a.reg_num desc ;
+commit;
+
+drop table if exists tmp_rs_order_hour_monitor4;
+create table tmp_rs_order_hour_monitor4 as
+select site_from,hour,max(reg_num) reg_num from tmp_rs_order_hour_monitor2
+group by  site_from,hour
+union all
+select site_from,hour,min(reg_num) reg_num from tmp_rs_order_hour_monitor3
+group by  site_from,hour;
+commit;
+
+drop table if exists tmp_rs_order_hour_monitor5;
+create table tmp_rs_order_hour_monitor5 as
+select site_from,hour,max(reg_num) max_reg_num,min(reg_num) min_reg_num from
+tmp_rs_order_hour_monitor4
+group by site_from,hour;
+commit;
+
+#SET SQL_SAFE_UPDATES = 0;
+#delete from rs_order_hour_monitor_num  where date(start_date)=v_date;
+#commit;
+
+insert into rs_order_hour_monitor_num(site_from,start_date,hour,index_current,max_order_num,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.hour,a.reg_num,max_reg_num,min_reg_num,'min','reg' from tmp_rs_order_hour_monitor a
+left join tmp_rs_order_hour_monitor5 b
+on a.site_from=b.site_from
+and a.hour=b.hour
+and date(a.start_date)=v_date
+where a.reg_num<b.min_reg_num*0.7 and a.site_from not in('ar','it');
+commit;
+
+#delete from rs_order_hour_monitor_avg  where date(start_date)=v_date;
+#commit;
+insert into rs_order_hour_monitor_num(site_from,start_date,hour,index_current,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.hour,a.reg_num,b.avg_cnt,'avg','reg' from tmp_rs_order_hour_monitor a
+left join tmp_rs_order_hour_monitor1 b
+on a.site_from=b.site_from
+and a.hour=b.hour
+and date(a.start_date)=v_date
+where a.reg_num<0.2*b.avg_cnt and a.site_from not in('ar','it','ru');
+commit;
+
+
+##########################################################转化率
+
+
+
+
+
+set v_date=date_add(v_date, INTERVAL 1 day) ;
+if v_date>end_time then 
+leave loop_label;
+end if;
+end loop;
+
+#set status_flag='success';
+
+
+END

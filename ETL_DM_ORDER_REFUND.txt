@@ -1,0 +1,203 @@
+CREATE DEFINER=`bi`@`%` PROCEDURE `ETL_DM_ORDER_REFUND`(start_time date,
+end_time date,
+v_etl_number int,
+inout status_flag  varchar(10)
+)
+BEGIN
+/*
+1、退货退款原因占比
+2、退款率
+*/
+
+declare v_date date;
+declare day_cnt int;
+declare week_cnt int;
+declare month_cnt int;
+set v_date=start_time;
+set day_cnt=0;
+set week_cnt=0;
+set month_cnt=0;
+
+
+loop_label:loop
+
+/*
+	退货原因占比
+	按天
+*/
+select count(1) into day_cnt from bi_ods.rs_order_refund a 
+inner join bi_ods.rs_order b on a.order_id = b.order_id
+where  FROM_UNIXTIME( b.pay_time, '%Y-%m-%d') >= v_date 
+and FROM_UNIXTIME(b.pay_time, '%Y-%m-%d') <date_add(v_date, INTERVAL 1 day) 
+and refund_type in (10,11,12,13,14,16,29,30) ;
+
+drop table if exists tmp_dm_order_refund_day;
+/*
+insert into tmp_dm_order_refund_day (add_date,refund_type,refund_cnt,refund_reason)
+select FROM_UNIXTIME( add_time, '%Y-%m-%d'),refund_type,count(1),refund_type_reason from bi_dw.dw_fact_order_refund a left join bi_dw.dw_dim_order_refund_type b on a.refund_type = b.id
+where FROM_UNIXTIME( add_time, '%Y-%m-%d')>=v_date and FROM_UNIXTIME( add_time, '%Y-%m-%d')<date_add(v_date, INTERVAL 1 day) and refund_type_reason in (
+'材质','污渍','色差','尺码','超时','发错货','不合适','破损')
+group by FROM_UNIXTIME(add_time, '%Y-%m-%d'),refund_type;*/
+create table  if not exists tmp_dm_order_refund_day as
+select FROM_UNIXTIME( b.pay_time, '%Y-%m-%d') add_date,a.refund_type,count(1) refund_cnt from bi_ods.rs_order_refund a 
+inner join bi_ods.rs_order b on a.order_id = b.order_id
+where  FROM_UNIXTIME( b.pay_time, '%Y-%m-%d') >= v_date 
+and FROM_UNIXTIME(b.pay_time, '%Y-%m-%d') <date_add(v_date, INTERVAL 1 day) 
+and refund_type in (10,11,12,13,14,16,29,30) 
+group by FROM_UNIXTIME( b.pay_time, '%Y-%m-%d'),a.refund_type;
+
+
+
+commit;
+
+
+
+
+delete from dm_order_refund_day 
+where add_date in (select add_date from tmp_dm_order_refund_day);
+commit;
+
+insert into dm_order_refund_day (add_date,refund_reason,refund_cnt,refund_rate)
+select  add_date,case when refund_type_reason='不合适'  then '无理由'
+else refund_type_reason end,refund_cnt,round(refund_cnt/day_cnt,4) from tmp_dm_order_refund_day t1
+left join bi_dw.dw_dim_order_refund_type t2
+on t1.refund_type=t2.id;
+commit;
+
+/*
+	退货原因占比
+	按周
+*/
+
+select ifnull(sum(refund_cnt),0) into week_cnt from bi_dm.dm_order_refund_day a left join bi_dw.dw_dim_date c on a.add_date = c.full_date_key
+where weekofyear(full_date_key)=weekofyear(v_date)
+and year(full_date_key) = year(v_date);
+
+
+#drop table if exists tmp_dm_order_refund_week;
+truncate table tmp_dm_order_refund_week;
+insert into tmp_dm_order_refund_week (static_week,week_of_year,refund_cnt,refund_reason)
+#create table  if not exists tmp_dm_order_refund_day as
+select static_week,week_of_year,sum(refund_cnt),refund_reason from bi_dm.dm_order_refund_day a left join bi_dw.dw_dim_date c on a.add_date = c.full_date_key
+where weekofyear(full_date_key)=weekofyear(v_date)
+and year(full_date_key) = year(v_date)
+group by week_of_year,refund_reason;
+commit;
+
+delete  t1.* from dm_order_refund_week t1
+inner join tmp_dm_order_refund_week t2
+on t1.static_week=t2.static_week ;#and t1.week_of_year=t2.week_of_year;
+commit;
+
+insert into dm_order_refund_week (static_week,week_of_year,refund_reason,refund_cnt,refund_rate)
+select static_week,week_of_year,refund_reason,refund_cnt,round(refund_cnt/week_cnt,4) from tmp_dm_order_refund_week
+group by week_of_year,refund_reason;
+commit;
+
+
+/*
+	退货原因占比
+	按月
+*/
+
+select ifnull(sum(refund_cnt),0) into month_cnt from bi_dm.dm_order_refund_day a left join bi_dw.dw_dim_date c on a.add_date = c.full_date_key
+where month(full_date_key)=month(v_date)
+and  year(full_date_key)=year(v_date);
+
+
+truncate table tmp_dm_order_refund_month;
+
+insert into tmp_dm_order_refund_month (static_month,refund_cnt,refund_reason)
+select static_month,sum(refund_cnt),refund_reason from bi_dm.dm_order_refund_day a left join bi_dw.dw_dim_date c on a.add_date = c.full_date_key
+where month(full_date_key)=month(v_date)
+and year(full_date_key)=year(v_date)
+group by static_month,refund_reason;
+commit;
+
+delete from dm_order_refund_month 
+where static_month in (select static_month from tmp_dm_order_refund_month);
+commit;
+
+insert into dm_order_refund_month (static_month,refund_reason,refund_cnt,refund_rate)
+select static_month,refund_reason,refund_cnt,round(refund_cnt/month_cnt,4) from tmp_dm_order_refund_month
+group by static_month,refund_reason;
+commit;
+
+/*
+	退货率
+    按天
+*/
+drop table if exists tmp_dm_order_refund_rate_day;
+create table  if not exists tmp_dm_order_refund_rate_day as
+select FROM_UNIXTIME( pay_time, '%Y-%m-%d') add_date,count(1) order_cnt from bi_ods.rs_order
+where FROM_UNIXTIME( pay_time, '%Y-%m-%d')>=v_date and FROM_UNIXTIME( pay_time, '%Y-%m-%d')<date_add(v_date, INTERVAL 1 day)
+and total_all!=0
+and is_delete=0
+and status=1
+group by FROM_UNIXTIME( pay_time, '%Y-%m-%d');
+#and site_from in ('www', 'm', 'fr', 'es', 'de', 'ru', 'us', 'ios', 'it');
+commit;
+
+delete from dm_order_refund_rate_day 
+where add_date in (select add_date from tmp_dm_order_refund_rate_day);
+commit;
+
+insert into dm_order_refund_rate_day(add_date,order_cnt,order_refund_rate)
+select add_date,order_cnt,round(day_cnt/order_cnt,4) from tmp_dm_order_refund_rate_day;
+commit;
+
+/*
+	退货率
+    按周
+*/
+
+truncate table tmp_dm_order_refund_rate_week;
+
+insert into tmp_dm_order_refund_rate_week(static_week,week_of_year,order_cnt)
+select static_week,week_of_year,sum(order_cnt) from dm_order_refund_rate_day a left join bi_dw.dw_dim_date c on a.add_date = c.full_date_key
+where weekofyear(full_date_key)=weekofyear(v_date)
+and year(full_date_key) = year(v_date)
+group by year(v_date),week_of_year;
+commit;
+
+delete t1.* from dm_order_refund_rate_week t1
+inner join tmp_dm_order_refund_rate_week t2
+on t1.static_week=t2.static_week; #and t1.week_of_year=t2.week_of_year;
+commit;
+
+insert into dm_order_refund_rate_week(static_week,week_of_year,order_cnt,order_refund_rate)
+select static_week,week_of_year,order_cnt,round(week_cnt/order_cnt,4) from tmp_dm_order_refund_rate_week;
+commit;
+
+/*
+	退货率
+    按月
+*/
+
+truncate table tmp_dm_order_refund_rate_month;
+
+insert into tmp_dm_order_refund_rate_month(static_month,order_cnt)
+select static_month,sum(order_cnt) from dm_order_refund_rate_day a left join bi_dw.dw_dim_date c on a.add_date = c.full_date_key
+where month(full_date_key)=month(v_date)
+and year(full_date_key)=year(v_date)
+group by static_month;
+commit;
+
+delete from dm_order_refund_rate_month 
+where static_month in (select static_month from tmp_dm_order_refund_rate_month);
+commit;
+
+insert into dm_order_refund_rate_month(static_month,order_cnt,order_refund_rate)
+select static_month,order_cnt,round(month_cnt/order_cnt,4) from tmp_dm_order_refund_rate_month;
+commit;
+
+set v_date=date_add(v_date, INTERVAL 1 day) ;
+if v_date>end_time then 
+leave loop_label;
+end if;
+end loop;
+
+set status_flag='success';
+
+
+END

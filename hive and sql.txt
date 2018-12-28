@@ -1,0 +1,2 @@
+drop table tmp_romwe_log_site_from_sum7;
+create table tmp_romwe_log_site_from_sum7 as select site_from,http_status,count(*) http_status_cnt from dw_romwe_fact_log_detail where http_status in ('404','500','502','505') and dt='20150315' group by site_from,http_status;

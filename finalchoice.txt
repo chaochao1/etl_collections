@@ -1,0 +1,200 @@
+drop table if exists z_sunchao_pc_get;
+create table z_sunchao_pc_get as
+select request_body,nginx_request_time,upstream_time from dw_sheinside_fact_log_detail where device_type = 'Computer' and request_type = 'GET' and dt>='20150309' 
+and dt<='20150316';
+
+create table z_sunchao_mobile_get as
+select request_body,nginx_request_time,upstream_time from dw_sheinside_fact_log_detail where site_from = 'm' and request_type = 'GET' and dt>='20150309' 
+and dt<='20150316';
+
+create table z_sunchao_pc_post as
+select request_body,post_param,nginx_request_time,upstream_time from dw_sheinside_fact_log_detail where device_type = 'Computer' and request_type = 'POST' and dt>='20150309' 
+and dt<='20150316';
+
+create table z_sunchao_mobile_post as
+select request_body,post_param,nginx_request_time,upstream_time from dw_sheinside_fact_log_detail where site_from = 'm' and request_type = 'POST' and dt>='20150309' 
+and dt<='20150316';
+
+
+一、web端 get************************************************************************************
+*************************************************************************
+1.daily new daily  web 
+when request_body rlike '^/daily-new.html.*' then '1.1 web GET daily-new'
+when request_body rlike '^/daily/2015-03-[0-9]+/$' then '2.1 web GET daily第一页'
+when request_body rlike '^/daily/2015+-03+-[0-9]+/page2/.*' then '2.2 web GET daily 第二页'
+when request_body rlike '^/daily/2015+-03+-[0-9]+/new_arrival/.*' then '2.3 web GET daily 最新价格'
+when request_body rlike '^/daily/2015+-03+-[0-9]+/lowest_price/.*' then '2.4 web GET daily 价格从低到高排序'
+when request_body rlike '^/daily/2015+-03+-[0-9]+/highest-price/.*' then '2.5 web GET daily 价格从高到低排序'
+
+3 一级分类 web get
+
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+.html.*' then '3.1 一级分类第一页'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+-p2.html.*' then '3.2 一级分类第二页'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+-estock.html.*' then '3.3 一级分类24小时发货'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+-new-arrival.html.*' then '3.4 一级分类最新排序'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+-lowest-price.html.*' then '3.5 一级分类价格从低到高排序'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+-highest-price.html.*' then '3.6 一级分类价格从高到低排序'
+
+4 二级分类 
+when request_body rlike '^/[A-Z]-[a-z]+-c-[0-9]+.html.*' then '4.1 二级级分类第一页'
+when request_body rlike '^/[A-Z]-[a-z]+-c-[0-9]+-p2.html.*' then '4.2 二级级分类第二页'
+
+5 属性分类
+when request_body rlike '^/attribute-[0-9]+_[0-9]+-[0-9]+.html.*' then '5.1 属性分类第一页'
+when request_body rlike '^/attribute-[0-9]+_[0-9]+-page2-[0-9]+.html.*' then '5.2 属性分类第二页'
+
+6虚拟分类页面
+when request_body rlike '^/.+-vc-[0-9]+.html.*' then '6.1 虚拟分类第一页'
+when request_body rlike '^/.+-vc-[0-9]+-p[0-9].html.*' then '6.2 虚拟分类第二页'
+
+7presalecoming 页面
+when request_body rlike '^/pre-sale-coming.html.*' then '7.1 pre-sale-coming页面1'
+when request_body rlike '^.+model=pre_sale&action=quick.*' then '7.2 quick vote点击操作'
+
+8 presale 页面
+when request_body rlike '^/pre-sale.html.*' then '8.1 pre-sale页面'
+
+9.presaleend 页面
+when request_body rlike '^/pre-sale-end.html.*' then '9.1 pre-sale-end页面'
+when request_body rlike '^/pre-sale-end-page2-[0-9]+.html.*' then '9.2 pre-sale-end第二页'
+when request_body rlike '^/pre-sale-end-[0-9]+.html.*' then '9.3 pre-sale分类页面'
+
+10.back-in-stock
+when request_body rlike '^/back-in-stock.html.*' then '10.1 back-in-stock页面'
+
+11 无
+
+12列表页加入收藏夹操作
+when request_body rlike '^.+model=category&action=wishlist.*' then '12.1 列表加入收藏夹页面'
+
+select count(*) from dw_sheinside_fact_log_detail where request_body like '%model=category&action=wishlist%' and device_type = 'Computer' and request_type = 'GET' and dt = '20150310';
+select count(*) from dw_sheinside_fact_log_detail where request_body like '%action=wishlist%' and device_type = 'Computer'  and dt = '20150311';
+
+13产品页
+when request_body rlike '^.*-p-[0-9]+-cat-[0-9]+.html.*' then '13.1 产品页'
+
+14 无 
+15 产品页加入收藏夹操作 无
+
+16 登录注册
+when request_body rlike '^/login_register.php.*' then '16.1 注册登录'
+
+17购物车
+when request_body rlike '^/shopping-cart.html.*' then '17.1 购物车'
+
+18 place order:
+when request_body rlike '^/index.php\?model=order&action=place_order.*' then '18.1 place order'
+
+
+二 pc端post
+************************************************************************************
+*************************************************************************
+2daily
+when post_param rlike '^model=category&action=cat_flow_show&daily=2015-03-[0-9]+&part=[0-9]+&page=[0-9]+&searchType=[0-9]+&cat_id=undefined&html_mark=daily.*' then '2.1 daily  post'
+3. 一级分类
+when post_param rlike '^model=category&action=category_flow_show&page=[0-9]+&part=[0-9]+&ship=[0-9]+&searchType=[0-9]+&cat_id=[0-9]+&mk=[0-9]+_page[0-9]+.*' then '3.1 一级分类  post'
+
+5 属性分类
+when post_param rlike '^model=category&action=attribute_flow_show&page=[0-9]+&part=[0-9]+&ship=undefined&searchType=[0-9]+&cat_id=[0-9]+&mk=[0-9]+_page1_attr[0-9]+_[0-9]+&attr_str=[0-9]+_[0-9]+-.*' then '5.1属性分类'
+6 虚拟分类页
+when post_param rlike '^model=category&action=cat_flow_show&page=[0-9]+&part=[0-9]+&id_list=undefined&searchType=[0-9]+&cat_id=[0-9]+&html_mark=virtual_category.*' then '6.1虚拟分类'
+9 pre-sale-end
+when post_param rlike '^model=category&action=cat_flow_show&part=[0-9]+&NowPage=[0-9]+&cat_id=[0-9]+&html_mark=presale_end.*' then '9.1pre-sale-end'
+11 列表页添加购物车动作 
+when post_param rlike '^model=category&action=attr_shopcart_b&goods_id=[0-9]+&temp=[0-9]+.*' then '11.1列表页添加购物车动作'
+when post_param rlike '^model=cart&action=view&header=[0-9]+&type=cart_goods_add&goods_id=[0-9]+&quantity=[0-9]+&attr_value_list_[0-9]+_[0-9]+=S,[0-9]+,.*' then '11.2添加购物车动作'
+14与11相同 忽略
+15 产品页加入收藏夹操作
+when post_param rlike '^model=category&action=wishlist&id=[0-9]+.*' then '15.1 产品页加入收藏夹操作'
+16 登录注册
+when post_param rlike '^model=login_register_ajax&action=check_login.*' then '16.1 登录'
+when post_param rlike '^model=login_register_ajax&action=check_email.*' then '16.2 检查email'
+when post_param rlike '^model=login_register&action=register.*' then '16.3 注册'
+when post_param rlike '^model=login_register&action=login&is_facebook=[0-9]{1}.*' then '16.4 facebook 登录 '
+17 购物车 wishlis与15相同 
+when post_param rlike '^model=cart&action=view&header=[0-9]{1}$' then '17.1 加载购物车'
+when post_param rlike '^model=cart&action=view&header=[0-9]{1}&type=cart_goods_update&rec_id=[0-9]+&goods_id=[0-9]+&goods_number=[0-9]+.*' then '17.2 更新购物车'
+when post_param rlike '^model=cart&action=view&header=[0-9]{1}&type=cart_goods_delete&rec_id=[0-9]+&goods_id=[0-9]+.*' then '17.3 删除购物车'
+when post_param rlike '^model=order&action=check_sale.*' then '17.4 下单前商品验证'
+18 place order
+when post_param rlike '^model=order&action=address_book&label=update_address.*' then '18.1 编辑地址'
+when post_param rlike '^model=order&action=address_book&label=insert_address.*' then '18.2 增加地址'
+when post_param rlike '^model=order&action=calculate_cart_and_shipping_ajax&country_id=[0-9]+&.*' then '18.3 切换地址'
+when post_param rlike '^model=coupon_point&action=coupon.*' then '18.4 使用coupon '
+when post_param rlike '^model=coupon_point&action=point.*' then '18.5 使用point'
+when post_param rlike '^model=order&action=generate_orders.*' then '18.6 生产订单'
+when post_param rlike '^model=worldpay&action=checkout.*' then '18.7 信用卡支付 '
+when post_param rlike '^model=order&action=generate_orders_again.*' then '18.8 再次生成订单'
+
+移动端 get
+2 daily
+when request_body rlike '^/daily/2015-03-[0-9]+/$' then '2_1 moblie  daily'
+when request_body rlike '^/daily/2015+-03+-[0-9]+/(page[0-9]/)?bestselling/.*' then '2_2 m GET daily 卖的最好的'
+when request_body rlike '^/daily/2015+-03+-[0-9]+/(page[0-9]/)?lowest_price/.*' then '2_3 m GET daily 价格从低到高排序'
+when request_body rlike '^/daily/2015+-03+-[0-9]+/(page[0-9]/)?highest_price/.*' then '2_4 m GET daily 价格从高到低排序'
+3
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+.html$' then '3.1一级分类'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+.html\?.*' then '3_2 一级分类瀑布流'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+-best.html.*' then '3_3 一级分类24小时发货'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+-new-arrival.html.*' then '3_4 一级分类最新排序'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+-lowest-price.html.*' then '3_5 一级分类价格从低到高排序'
+when request_body rlike '^/[A-Z][a-z]+-c-[0-9]+-highest-price.html.*' then '3_6 一级分类价格从高到低排序'
+4 二级分类
+when request_body rlike '^/[A-z]-[a-z]+-c-[0-9]+.html$' then '4_1 二级级分类'
+when request_body rlike '^/[A-z]-[a-z]+-c-[0-9]+.html\?.*' then '4_2 二级级分类瀑布流'
+5 属性分类
+when request_body rlike '^/attribute-[0-9]+_[0-9]+-[0-9]+.html$' then '5_1 属性分类'
+when request_body rlike '^/attribute-[0-9]+_[0-9]+-[0-9]+.html\?.*' then '5_2 属性分类'
+6. 虚拟分类页
+when request_body rlike '^/.+-vc-[0-9]+.html$' then '6_1 虚拟分类页'
+when request_body rlike '^/.+-vc-[0-9]+.html\?.*' then '6_2 虚拟分类2'
+8 presale
+when request_body rlike '^/pre-sale.html.*' then '8.1 presale'
+
+13 产品页
+when request_body rlike '^/.+-p-.*' then '13.1 产品页'
+
+16 登录注册 
+when request_body rlike '^/login_register.php.*' then '16.1登录注册'
+
+17 购物车
+when request_body rlike '^/shopping-cart.html.*' then '17.1购物车'
+
+18 place order
+when request_body rlike '^.+model=order&action=place_order.*' then '18.1 place order'
+
+移动端 post
+14 产品页添加购物车操作
+
+when post_param rlike '^model=cart&action=view&header=[0-9]&type=cart_goods_add&goods_id=[0-9]+&quantity=[0-9]+&attr_value_list_[0-9]+_[0-9]+=[A-Z]{1},[0-9]+,.*' then '14.1产品页添加购物车操作'
+15 产品页加入收藏夹操作 
+when post_param rlike '^model=category&action=wishlist&id=[0-9]+.*' then '15.1 产品页加入收藏夹操作'
+
+16 登录注册
+when post_param rlike '^model=login_register_ajax&action=check_login.*' then '16.1检查登录'
+when post_param rlike '^model=login_register_ajax&action=check_email.*' then '16.2检查email'
+when post_param rlike '^model=login_register&action=register.*' then '16.3 注册'
+when post_param rlike '^model=login_register&action=login&is_facebook.*' then '16.4 facebook登录'
+ 
+17 购物车
+when post_param rlike '^model=cart&action=view&header=[0-9]{1}$' then '17.1 加载购物车'
+when post_param rlike '^model=cart&action=view&header=[0-9]{1}&type=cart_goods_update.*' then '17.2 更新购物车'
+when post_param rlike '^model=cart&action=view&header=[0-9]{1}&type=cart_goods_delete.*' then '17.3 删除购物车'
+when post_param rlike '^model=order&action=check_sale.*' then '17.4 下单前商品验证'
+18 place order
+when post_param rlike '^model=order&action=address_book&label=update_address.*' then '18.1编辑地址'
+when post_param rlike '^model=order&action=address_book&label=insert_address.*' then '18.2添加地址'
+when post_param rlike '^model=order&action=calculate_cart_and_shipping_ajax.*' then '18.3 切换地址'
+when post_param rlike '^model=coupon_point&action=coupon.*' then '18.4 使用coupon'
+when post_param rlike '^model=coupon_point&action=point.*' then '18.5 使用point'
+when post_param rlike '^model=order&action=generate_orders.*' then '18.6 生成订单'
+when post_param rlike '^model=globalcollect&action=checkout.*' then '18.7 信用卡支付'
+when post_param rlike '^model=order&action=generate_orders_again.*' then '18.8 重新生成订单'
+
+
+
+
+
+
+
+

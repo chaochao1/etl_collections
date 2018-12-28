@@ -1,0 +1,60 @@
+CREATE DEFINER=`bi`@`%` PROCEDURE `ETL_DM_ORDER_STAT`(
+start_time date,
+end_time date,
+v_etl_number int,
+inout status_flag  varchar(10))
+BEGIN
+
+declare v_date date;
+set v_date=start_time;
+
+
+loop_label:loop
+
+
+
+truncate table tmp_dm_order_stat;
+
+insert into tmp_dm_order_stat (add_date,site_from,order_cnt,total_all_sum)
+select FROM_UNIXTIME( pay_time, '%Y-%m-%d'),site_from,count(1),0 from bi_dw.dw_fact_order
+where FROM_UNIXTIME( pay_time, '%Y-%m-%d')>=v_date and FROM_UNIXTIME( pay_time, '%Y-%m-%d')<=date_add(v_date, INTERVAL 1 day)
+and total_all!=0
+and is_delete=0
+and status>=1
+and site_from in ('www', 'm', 'fr', 'es', 'de', 'ru', 'us', 'ios', 'it')
+group by FROM_UNIXTIME( pay_time, '%Y-%m-%d'),site_from;
+commit;
+
+
+insert into tmp_dm_order_stat (add_date,site_from,order_cnt,total_all_sum)
+select FROM_UNIXTIME( pay_time, '%Y-%m-%d'),site_from,0,sum(total_all) from bi_dw.dw_fact_order
+where FROM_UNIXTIME( pay_time, '%Y-%m-%d')>=v_date and FROM_UNIXTIME( pay_time, '%Y-%m-%d')<=date_add(v_date, INTERVAL 1 day)
+and total_all!=0
+and is_delete=0
+and status>=1
+and site_from in ('www', 'm', 'fr', 'es', 'de', 'ru', 'us', 'ios', 'it')
+group by FROM_UNIXTIME( pay_time, '%Y-%m-%d'),site_from;
+commit;
+
+
+delete from dm_order_stat where add_date in (select add_date from tmp_dm_order_stat);
+commit;
+
+
+insert into dm_order_stat (add_date,site_from,order_cnt,total_all_sum)
+select add_date,site_from,sum(order_cnt),sum(total_all_sum) from tmp_dm_order_stat
+group by add_date,site_from;
+commit;
+
+
+set v_date=date_add(v_date, INTERVAL 1 day) ;
+if v_date>end_time then 
+leave loop_label;
+end if;
+end loop;
+
+set status_flag='success';
+
+
+
+END

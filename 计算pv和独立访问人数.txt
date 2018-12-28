@@ -1,0 +1,14 @@
+select  dt ,count(distinct cookie_id) ,count(1) pv_all from dw_sheinside_fact_log_detail 
+ where dt >='20150527' and dt<='20150601' and site_from = 'us' and 
+request_body rlike '^us.sheinside.com/help-[a-z]+-[0-9]+.*' group by dt;
+
+
+select request_body from dw_sheinside_fact_log_detail where dt = '20150530' and request_body rlike'^/help-[a-z]+-[0-9]+.*' and request_type = 'GET';
+
+
+select dt,count(distinct cookie_id),count(1) pv_all from dw_sheinside_fact_log_detail where dt >= '20150527' and dt <=20150601 and site_from = 'us' 
+and request_body rlike'^/help-[a-z]+-[0-9]+.*' and request_type = 'GET' group by dt;
+
+
+
+and request_body like '%us.sheinside.com/help%' group by dt;

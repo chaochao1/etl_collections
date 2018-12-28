@@ -1,0 +1,29 @@
+drop  table if exists z_sunchao_cart_001;
+create table z_sunchao_cart_001 as 
+select t.* from dw_sheinside_fact_log_detail t where dt='20150414'  and site_from='us';
+
+
+
+cookie_id 数
+select count(distinct cookie_id) from z_sunchao_cart_001;
+
+
+select count(distinct cookie_id) prod_all from (select hour, cookie_id  from z_sunchao_cart_001 where  request_type='GET'  and
+ request_body rlike '.+-p-[0-9]+-cat-[0-9]+.*' union all select  hour,cookie_id  from z_sunchao_cart_001 where  request_type='GET' 
+ and request_body rlike '.+-c-[0-9]+.*' union all select hour, cookie_id  from z_sunchao_cart_001 where  request_type='GET'  
+ and request_body rlike '.+-vc-[0-9]+.*'  union all select hour, cookie_id  from z_sunchao_cart_001 where request_type='GET' 
+ and request_body rlike '^/(byPrice|new_arrival|discount|attribute|lowest|highest|best|popular|alpha|pre-sale|limited-time|daily|top-rated|is-stock).+') t;
+ 
+ 
+select count(distinct cookie_id) car_all from z_sunchao_cart_001 where  request_type='POST' and 
+(post_param like '%cart_goods_add%' or post_param like '%goods_cart_add%' or post_param like '%action=add%');
+
+
+下单cookie_id
+select count(distinct cookie_id)  from z_sunchao_cart_001 where
+request_type='POST' and (request_body like '%order_review%' or request_body like '%generate_orders%');
+
+计算 help页面访问人数和pv数 
+
+select dt,count(distinct cookie_id),count(1) pv_all from dw_sheinside_fact_log_detail where dt >= '20150527' and dt <=20150601 and site_from = 'us' 
+and request_body rlike'^/help-[a-z]+-[0-9]+.*' and request_type = 'GET' group by dt;

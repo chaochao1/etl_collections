@@ -1,0 +1,258 @@
+CREATE DEFINER=`root`@`%` PROCEDURE `rs_day_monitor`(
+start_time date,
+end_time date,
+v_etl_number int#,
+#inout status_flag  varchar(10)
+)
+BEGIN
+
+
+
+declare v_date date;
+set v_date=start_time;
+
+
+loop_label:loop
+
+
+
+drop table if exists tmp_rs_day_monitor;
+create table if not exists tmp_rs_day_monitor as
+select site_from,start_date,order_num,uv_num,conversion_rate from  IP.daily_order_uv_cart
+where start_date>date_add(v_date, INTERVAL -30 day)
+and site_from in ('m','ar','it','ru');
+commit;
+
+
+##########################################################订单预警
+
+drop table if exists tmp_rs_day_monitor1;
+create table if not exists tmp_rs_day_monitor1 as
+select site_from,avg(order_num) avg_cnt from IP.tmp_rs_day_monitor
+#where start_date>date_add('2015-03-10', INTERVAL -30 day)
+#
+where site_from in ('ar','it','ru')
+group by site_from;
+commit;
+
+
+drop table if exists tmp_rs_day_monitor2;
+create table tmp_rs_day_monitor2 as
+select a.site_from,order_num 
+from tmp_rs_day_monitor a 
+where (select count(*) from tmp_rs_day_monitor 
+where site_from = a.site_from
+ and order_num < a.order_num   ) <4 
+order by a.site_from,a.order_num desc ;
+commit;
+
+drop table if exists tmp_rs_day_monitor3;
+create table tmp_rs_day_monitor3 as
+select a.site_from,order_num 
+from tmp_rs_day_monitor a 
+where (select count(*) from tmp_rs_day_monitor 
+where site_from = a.site_from
+ and order_num > a.order_num   ) <4 
+order by a.site_from,a.order_num desc ;
+commit;
+
+drop table if exists tmp_rs_day_monitor4;
+create table tmp_rs_day_monitor4 as
+select site_from,max(order_num) order_num from tmp_rs_day_monitor2
+group by  site_from
+union all
+select site_from,min(order_num) order_num from tmp_rs_day_monitor3
+group by  site_from;
+commit;
+
+drop table if exists tmp_rs_day_monitor5;
+create table tmp_rs_day_monitor5 as
+select site_from,max(order_num) max_order_num,min(order_num) min_order_num from
+tmp_rs_day_monitor4
+group by site_from;
+commit;
+
+SET SQL_SAFE_UPDATES = 0;
+delete from rs_day_monitor_num  where date(start_date)=v_date;
+commit;
+
+insert into rs_day_monitor_num(site_from,start_date,index_current,max_order_num,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.order_num,max_order_num,min_order_num,'min','order' from tmp_rs_day_monitor a
+left join tmp_rs_day_monitor5 b
+on a.site_from=b.site_from
+and date(a.start_date)=v_date
+where a.order_num<b.min_order_num*0.6 ;
+commit;
+
+#delete from rs_order_hour_monitor_avg  where date(start_date)=v_date;
+#commit;
+insert into rs_day_monitor_num(site_from,start_date,index_current,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.order_num,b.avg_cnt,'avg','order' from tmp_rs_day_monitor a
+left join tmp_rs_day_monitor1 b
+on a.site_from=b.site_from
+and date(a.start_date)=v_date
+where a.order_num<0.2*b.avg_cnt ;
+commit;
+
+
+##########################################################转化率预警
+
+drop table if exists tmp_rs_day_monitor1;
+create table if not exists tmp_rs_day_monitor1 as
+select site_from,avg(conversion_rate) avg_cnt from IP.tmp_rs_day_monitor
+#where start_date>date_add('2015-03-10', INTERVAL -30 day)
+#
+where site_from in ('ar','it','ru')
+group by site_from;
+commit;
+
+
+drop table if exists tmp_rs_day_monitor2;
+create table tmp_rs_day_monitor2 as
+select a.site_from,conversion_rate 
+from tmp_rs_day_monitor a 
+where (select count(*) from tmp_rs_order_hour_monitor 
+where site_from = a.site_from
+ and conversion_rate < a.conversion_rate   ) <4 
+order by a.site_from,a.conversion_rate desc ;
+commit;
+
+drop table if exists tmp_rs_day_monitor3;
+create table tmp_rs_day_monitor3 as
+select a.site_from,conversion_rate 
+from tmp_rs_day_monitor a 
+where (select count(*) from tmp_rs_day_monitor 
+where site_from = a.site_from
+ and conversion_rate > a.conversion_rate   ) <4 
+order by a.site_from,a.conversion_rate desc ;
+commit;
+
+drop table if exists tmp_rs_day_monitor4;
+create table tmp_rs_day_monitor4 as
+select site_from,max(conversion_rate) conversion_rate from tmp_rs_day_monitor2
+group by  site_from
+union all
+select site_from,min(conversion_rate) conversion_rate from tmp_rs_day_monitor3
+group by  site_from;
+commit;
+
+drop table if exists tmp_rs_day_monitor5;
+create table tmp_rs_day_monitor5 as
+select site_from,max(conversion_rate) max_conversion_rate,min(conversion_rate) min_conversion_rate from
+tmp_rs_day_monitor4
+group by site_from;
+commit;
+
+#SET SQL_SAFE_UPDATES = 0;
+#delete from rs_order_hour_monitor_num  where date(start_date)=v_date;
+commit;
+
+insert into rs_day_monitor_num(site_from,start_date,index_current,max_order_num,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.conversion_rate,max_conversion_rate,min_conversion_rate,'min','conversion_rate' from tmp_rs_day_monitor a
+left join tmp_rs_day_monitor5 b
+on a.site_from=b.site_from
+and date(a.start_date)=v_date
+where a.conversion_rate<b.min_conversion_rate*0.8 ;
+commit;
+
+#delete from rs_order_hour_monitor_avg  where date(start_date)=v_date;
+#commit;
+insert into rs_day_monitor_num(site_from,start_date,index_current,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.uv_num,b.avg_cnt,'avg','conversion_rate' from tmp_rs_day_monitor a
+left join tmp_rs_day_monitor1 b
+on a.site_from=b.site_from
+and date(a.start_date)=v_date
+where a.conversion_rate<0.2*b.avg_cnt ;
+commit;
+
+##########################################################IP数
+
+
+
+drop table if exists tmp_rs_day_monitor1;
+create table if not exists tmp_rs_day_monitor1 as
+select site_from,avg(uv_num) avg_cnt from IP.tmp_rs_day_monitor
+#where start_date>date_add('2015-03-10', INTERVAL -30 day)
+#
+where site_from='m'
+group by site_from;
+commit;
+
+
+drop table if exists tmp_rs_day_monitor2;
+create table tmp_rs_day_monitor2 as
+select a.site_from,uv_num 
+from tmp_rs_day_monitor a 
+where (select count(*) from tmp_rs_day_monitor 
+where site_from = a.site_from
+ and uv_num < a.uv_num   ) <4 
+ and site_from='m'
+order by a.site_from,a.uv_num desc ;
+commit;
+
+drop table if exists tmp_rs_day_monitor3;
+create table tmp_rs_day_monitor3 as
+select a.site_from,uv_num 
+from tmp_rs_day_monitor a 
+where (select count(*) from tmp_rs_day_monitor 
+where site_from = a.site_from
+ and uv_num > a.uv_num   ) <4 
+ and site_from='m'
+order by a.site_from,a.uv_num desc ;
+commit;
+
+drop table if exists tmp_rs_day_monitor4;
+create table tmp_rs_day_monitor4 as
+select site_from,max(uv_num) uv_num from tmp_rs_day_monitor2
+group by  site_from
+union all
+select site_from,min(uv_num) uv_num from tmp_rs_day_monitor3
+group by  site_from;
+commit;
+
+drop table if exists tmp_rs_day_monitor5;
+create table tmp_rs_day_monitor5 as
+select site_from,max(uv_num) max_uv_num,min(uv_num) min_uv_num from
+tmp_rs_day_monitor4
+group by site_from;
+commit;
+
+#SET SQL_SAFE_UPDATES = 0;
+#delete from rs_order_hour_monitor_num  where date(start_date)=v_date;
+#commit;
+
+insert into rs_day_monitor_num(site_from,start_date,index_current,max_order_num,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.uv_num,max_uv_num,max_uv_num,'min','ip' from tmp_rs_day_monitor a
+left join tmp_rs_day_monitor5 b
+on a.site_from=b.site_from
+and date(a.start_date)=v_date
+where a.uv_num<b.min_uv_num*0.7 ;
+commit;
+
+#delete from rs_order_hour_monitor_avg  where date(start_date)=v_date;
+#commit;
+insert into rs_day_monitor_num(site_from,start_date,index_current,index_standard,monitor_type,index_type)
+select a.site_from,a.start_date,a.uv_num,b.avg_cnt,'avg','ip' from tmp_rs_day_monitor a
+left join tmp_rs_day_monitor1 b
+on a.site_from=b.site_from
+and date(a.start_date)=v_date
+where a.uv_num<0.2*b.avg_cnt ;
+commit;
+
+
+##########################################################转化率
+
+
+
+
+
+set v_date=date_add(v_date, INTERVAL 1 day) ;
+if v_date>=end_time then 
+leave loop_label;
+end if;
+end loop;
+
+#set status_flag='success';
+
+
+END

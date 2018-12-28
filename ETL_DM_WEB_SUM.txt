@@ -1,0 +1,77 @@
+                              CREATE DEFINER=`bi`@`%` PROCEDURE `ETL_DM_WEB_SUM`(start_time date,
+end_time date,
+v_etl_number int,
+inout status_flag  varchar(10))
+BEGIN
+
+
+declare v_date date;
+set v_date=start_time;
+
+loop_label:loop
+
+delete from dm_web_sum_all_flow where cal_date in
+(select cal_date from tmp_dm_web_sum_all_flow);
+commit;
+
+
+
+insert into dm_web_sum_all_flow(
+cal_date,
+ip_all,
+pv_all,
+prod_all,
+car_all,
+checkout_all,
+order_all
+)
+select cal_date,
+ip_all,
+pv_all,
+prod_all,
+car_all,
+checkout_all,
+order_all
+from tmp_dm_web_sum_all_flow t1;
+commit;
+
+
+delete from dm_web_sum_site_from_flow where cal_date in
+(select cal_date from tmp_dm_web_sum_site_from_flow);
+commit;
+
+
+
+insert into dm_web_sum_site_from_flow(
+cal_date,
+site_from,
+ip_all,
+pv_all,
+prod_all,
+car_all,
+checkout_all,
+order_all
+)
+select 
+cal_date,
+site_from,
+ip_all,
+pv_all,
+prod_all,
+car_all,
+checkout_all,
+order_all
+from tmp_dm_web_sum_site_from_flow t1;
+commit;
+
+
+set v_date=date_add(v_date, INTERVAL 1 day) ;
+if v_date>end_time then 
+leave loop_label;
+end if;
+end loop;
+
+set status_flag='success';
+
+
+END
